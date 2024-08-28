@@ -1,0 +1,263 @@
+// #include <rclcpp/rclcpp.hpp>
+// #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
+// #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+// #include <tf2/LinearMath/Quaternion.h>
+// #include <Eigen/Dense>
+// #include <message_filters/subscriber.h>
+// #include <message_filters/time_synchronizer.h>
+// #include <message_filters/sync_policies/approximate_time.h>
+// #include <cmath>
+
+// class PoseFusionNode : public rclcpp::Node
+// {
+// public:
+//     PoseFusionNode()
+//         : Node("pose_fusion_node"), is_ref_set_(false)
+//     {
+//         // Parameter declarations and initializations as before
+
+//         // Subscribers for LiDAR and GNSS pose
+//         lidar_pose_sub_.subscribe(this, "/lidar_pose_with_covariance");
+//         gnss_pose_sub_.subscribe(this, "/gnss_pose_with_covariance");
+
+//         // Synchronizer to synchronize LiDAR and GNSS poses
+//         sync_ = std::make_shared<message_filters::Synchronizer<SyncPolicy>>(
+//             SyncPolicy(10), lidar_pose_sub_, gnss_pose_sub_);
+//         sync_->registerCallback(std::bind(&PoseFusionNode::poseCallback, this, std::placeholders::_1, std::placeholders::_2));
+
+//         // Publisher for final fused pose
+//         final_pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("/final/pose_with_covariance", 10);
+
+//         // WGS-84 Parameters
+//         a_ = 6378137.0;  // Earth's radius in meters
+//         e2_ = 0.00669437999014;  // Eccentricity squared
+//     }
+
+// private:
+//     void poseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr lidar_msg,
+//                       const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr gnss_msg)
+//     {
+//         if (!is_ref_set_)
+//         {
+//             ref_lat_ = gnss_msg->pose.pose.position.y;
+//             ref_lon_ = gnss_msg->pose.pose.position.x;
+//             ref_alt_ = gnss_msg->pose.pose.position.z;
+//             is_ref_set_ = true;
+//         }
+
+//         // Convert LiDAR pose to global frame (assuming no change, identity transformation)
+//         Eigen::Vector3d lidar_pos(lidar_msg->pose.pose.position.x, lidar_msg->pose.pose.position.y, lidar_msg->pose.pose.position.z);
+
+//         // Convert GNSS position to ENU
+//         Eigen::Vector3d gnss_pos = convertGnssToENU(gnss_msg->pose.pose.position);
+
+//         // Fused position calculation
+//         geometry_msgs::msg::PoseWithCovarianceStamped fused_pose;
+//         fused_pose.header.stamp = this->now();
+//         fused_pose.header.frame_id = "map"; // Adjust frame_id as needed
+
+//         fused_pose.pose.pose.position.x = lidar_weight_ * lidar_pos.x() +
+//                                           gnss_weight_ * gnss_pos.x();
+//         fused_pose.pose.pose.position.y = lidar_weight_ * lidar_pos.y() +
+//                                           gnss_weight_ * gnss_pos.y();
+//         fused_pose.pose.pose.position.z = lidar_weight_ * lidar_pos.z() +
+//                                           gnss_weight_ * gnss_pos.z();
+
+//         fused_pose.pose.pose.orientation = lidar_msg->pose.pose.orientation;
+
+//         // Covariance fusion
+//         for (size_t i = 0; i < 36; ++i)
+//         {
+//             fused_pose.pose.covariance[i] = lidar_weight_ * lidar_msg->pose.covariance[i] +
+//                                             gnss_weight_ * gnss_msg->pose.covariance[i];
+//         }
+
+//         final_pose_pub_->publish(fused_pose);
+//     }
+
+//     Eigen::Vector3d convertGnssToENU(const geometry_msgs::msg::Point& gnss_position)
+//     {
+//         double dLat = gnss_position.y - ref_lat_;
+//         double dLon = gnss_position.x - ref_lon_;
+//         double dAlt = gnss_position.z - ref_alt_;
+
+//         double R_N = a_ / std::sqrt(1 - e2_ * std::sin(ref_lat_ * M_PI / 180.0) * std::sin(ref_lat_ * M_PI / 180.0));
+//         double R_E = R_N * (1 - e2_);
+
+//         double E = R_E * std::cos(ref_lat_ * M_PI / 180.0) * (dLon * M_PI / 180.0);
+//         double N = R_N * (dLat * M_PI / 180.0);
+//         double U = dAlt;
+
+//         return Eigen::Vector3d(E, N, U);
+//     }
+
+//     using SyncPolicy = message_filters::sync_policies::ApproximateTime<
+//         geometry_msgs::msg::PoseWithCovarianceStamped,
+//         geometry_msgs::msg::PoseWithCovarianceStamped>;
+
+//     message_filters::Subscriber<geometry_msgs::msg::PoseWithCovarianceStamped> lidar_pose_sub_;
+//     message_filters::Subscriber<geometry_msgs::msg::PoseWithCovarianceStamped> gnss_pose_sub_;
+//     std::shared_ptr<message_filters::Synchronizer<SyncPolicy>> sync_;
+//     rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr final_pose_pub_;
+
+//     double lidar_weight_;
+//     double gnss_weight_;
+//     double lidar_hz_;
+//     double gnss_hz_;
+//     double ref_lat_;
+//     double ref_lon_;
+//     double ref_alt_;
+//     double a_;
+//     double e2_;
+//     bool is_ref_set_;
+// };
+
+// int main(int argc, char *argv[])
+// {
+//     rclcpp::init(argc, argv);
+//     rclcpp::spin(std::make_shared<PoseFusionNode>());
+//     rclcpp::shutdown();
+//     return 0;
+// }
+
+
+
+
+#include <rclcpp/rclcpp.hpp>
+#include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <tf2/LinearMath/Quaternion.h>
+#include <Eigen/Dense>
+#include <cmath>
+
+class PoseFusionNode : public rclcpp::Node
+{
+public:
+    PoseFusionNode()
+        : Node("pose_fusion_node"), is_ref_set_(false)
+    {
+        // Parameter declarations and initializations as before
+
+        // Subscribers for LiDAR and GNSS pose
+        lidar_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
+            "/lidar_pose_with_covariance", 10,
+            std::bind(&PoseFusionNode::lidarPoseCallback, this, std::placeholders::_1));
+
+        gnss_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
+            "/gnss_pose_with_covariance", 10,
+            std::bind(&PoseFusionNode::gnssPoseCallback, this, std::placeholders::_1));
+
+        // Publisher for final fused pose
+        final_pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("/final/pose_with_covariance", 10);
+
+        // WGS-84 Parameters
+        a_ = 6378137.0;  // Earth's radius in meters
+        e2_ = 0.00669437999014;  // Eccentricity squared
+    }
+
+private:
+    void lidarPoseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr lidar_msg)
+    {
+        // Store the latest LiDAR pose
+        last_lidar_msg_ = lidar_msg;
+
+        // If GNSS data is also available, fuse the poses
+        if (last_gnss_msg_)
+        {
+            fusePoses();
+        }
+    }
+
+    void gnssPoseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr gnss_msg)
+    {
+        // Store the latest GNSS pose
+        last_gnss_msg_ = gnss_msg;
+
+        // Set reference point if not set
+        if (!is_ref_set_)
+        {
+            ref_lat_ = gnss_msg->pose.pose.position.y;
+            ref_lon_ = gnss_msg->pose.pose.position.x;
+            ref_alt_ = gnss_msg->pose.pose.position.z;
+            is_ref_set_ = true;
+        }
+
+        // If LiDAR data is also available, fuse the poses
+        if (last_lidar_msg_)
+        {
+            fusePoses();
+        }
+    }
+
+    void fusePoses()
+    {
+        // Convert LiDAR pose to global frame (assuming no change, identity transformation)
+        Eigen::Vector3d lidar_pos(last_lidar_msg_->pose.pose.position.x, last_lidar_msg_->pose.pose.position.y, last_lidar_msg_->pose.pose.position.z);
+
+        // Convert GNSS position to ENU
+        Eigen::Vector3d gnss_pos = convertGnssToENU(last_gnss_msg_->pose.pose.position);
+
+        // Fused position calculation
+        geometry_msgs::msg::PoseWithCovarianceStamped fused_pose;
+        fused_pose.header.stamp = this->now();
+        fused_pose.header.frame_id = "map"; // Adjust frame_id as needed
+
+        fused_pose.pose.pose.position.x = lidar_weight_ * lidar_pos.x() +
+                                          gnss_weight_ * gnss_pos.x();
+        fused_pose.pose.pose.position.y = lidar_weight_ * lidar_pos.y() +
+                                          gnss_weight_ * gnss_pos.y();
+        fused_pose.pose.pose.position.z = lidar_weight_ * lidar_pos.z() +
+                                          gnss_weight_ * gnss_pos.z();
+
+        fused_pose.pose.pose.orientation = last_lidar_msg_->pose.pose.orientation;
+
+        // Covariance fusion
+        for (size_t i = 0; i < 36; ++i)
+        {
+            fused_pose.pose.covariance[i] = lidar_weight_ * last_lidar_msg_->pose.covariance[i] +
+                                            gnss_weight_ * last_gnss_msg_->pose.covariance[i];
+        }
+
+        final_pose_pub_->publish(fused_pose);
+    }
+
+    Eigen::Vector3d convertGnssToENU(const geometry_msgs::msg::Point& gnss_position)
+    {
+        double dLat = gnss_position.y - ref_lat_;
+        double dLon = gnss_position.x - ref_lon_;
+        double dAlt = gnss_position.z - ref_alt_;
+
+        double R_N = a_ / std::sqrt(1 - e2_ * std::sin(ref_lat_ * M_PI / 180.0) * std::sin(ref_lat_ * M_PI / 180.0));
+        double R_E = R_N * (1 - e2_);
+
+        double E = R_E * std::cos(ref_lat_ * M_PI / 180.0) * (dLon * M_PI / 180.0);
+        double N = R_N * (dLat * M_PI / 180.0);
+        double U = dAlt;
+
+        return Eigen::Vector3d(E, N, U);
+    }
+
+    rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr lidar_pose_sub_;
+    rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr gnss_pose_sub_;
+    rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr final_pose_pub_;
+
+    geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr last_lidar_msg_;
+    geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr last_gnss_msg_;
+
+    double lidar_weight_;
+    double gnss_weight_;
+    double ref_lat_;
+    double ref_lon_;
+    double ref_alt_;
+    double a_;
+    double e2_;
+    bool is_ref_set_;
+};
+
+int main(int argc, char *argv[])
+{
+    rclcpp::init(argc, argv);
+    rclcpp::spin(std::make_shared<PoseFusionNode>());
+    rclcpp::shutdown();
+    return 0;
+}
